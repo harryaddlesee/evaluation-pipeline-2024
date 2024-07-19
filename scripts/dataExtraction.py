@@ -12,11 +12,11 @@ except OSError:
     nlp = spacy.load("en_core_web_sm")
 
 # Function to read the dataset from a text file
-def read_dataset_from_txt(file_path):
+def read_dataset_from_txt(file_path, delimiter='= = ='):
     with open(file_path, 'r', encoding='utf-8') as file:
         content = file.read()
     
-    entries = content.split('\n\n')
+    entries = content.split(f'\n{delimiter}')
     dataset = {}
     for entry in entries:
         if entry.strip():
@@ -46,7 +46,7 @@ def create_vector_database(words):
     return vector_database
 
 # Function to filter similar words
-def filter_similar_words(vector_database, threshold=0.95):
+def filter_similar_words(vector_database, threshold=0.9):
     words = list(vector_database.keys())
     vectors = np.array(list(vector_database.values()))
     similarity_matrix = cosine_similarity(vectors)
@@ -67,9 +67,16 @@ def is_valid_vector(vector):
     return vector is not None and len(vector) == 300  # Check for valid length (SpaCy vectors are typically of length 300)
 
 # Function to filter similar titles and contexts
-def filter_titles_and_contexts(dataset, threshold=0.95):
+def filter_titles_and_contexts(dataset, threshold=0.9):
     titles = list(dataset.keys())
     title_vectors = [nlp(title).vector for title in titles if is_valid_vector(nlp(title).vector)]
+
+    # Debug: Print the number of valid title vectors found
+    print(f"Number of valid title vectors: {len(title_vectors)}")
+
+    # If title_vectors is empty, return the original dataset and empty removed_pairs
+    if len(title_vectors) == 0:
+        return dataset, []
 
     similarity_matrix = cosine_similarity(title_vectors)
     to_remove = set()
@@ -98,16 +105,21 @@ def save_to_csv(filtered_dataset, output_file):
         for title, context in filtered_dataset.items():
             writer.writerow({'Title': title, 'Context': context})
 
-# Path to the text file
-file_path = '/users/ha2098/sharedscratch/venv/projects/baseline-pretraining/trainDir/datasets/babylm_100M/simple_wiki.train'
+# Path to the text files
+simple_wiki_file_path = '/users/ha2098/sharedscratch/venv/projects/baseline-pretraining/trainDir/datasets/babylm_100M/simple_wiki.train'
+wiki_file_path = '/users/ha2098/sharedscratch/venv/projects/baseline-pretraining/trainDir/datasets/babylm_100M/wikipedia.train'
 
-# Read the dataset from the text file
-simple_wiki_dataset = read_dataset_from_txt(file_path)
+# Read the datasets from the text files
+simple_wiki_dataset = read_dataset_from_txt(simple_wiki_file_path, delimiter='= = =')
+wiki_dataset = read_dataset_from_txt(wiki_file_path, delimiter='= = =')
+
+# Combine the datasets
+combined_dataset = {**simple_wiki_dataset, **wiki_dataset}
 
 # Process the dataset until 10,000,000 tokens or all entries are processed
 total_tokens = 0
 filtered_dataset = {}
-for title, context in simple_wiki_dataset.items():
+for title, context in combined_dataset.items():
     # Extract words from context
     words = extract_words(context)
     total_tokens += len(words)
