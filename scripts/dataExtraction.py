@@ -3,8 +3,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import csv
 
-# Load SpaCy model
-nlp = spacy.load("en_core_web_sm")
+# Ensure the SpaCy model is available
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    from spacy.cli import download
+    download("en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm")
 
 # Function to read the dataset from a text file
 def read_dataset_from_txt(file_path):
@@ -57,17 +62,25 @@ def filter_similar_words(vector_database, threshold=0.95):
     filtered_database = {word: vector for word, vector in vector_database.items() if word not in to_remove}
     return filtered_database, removed_pairs
 
+# Function to validate vectors
+def is_valid_vector(vector):
+    return vector is not None and len(vector) == 300  # Check for valid length (SpaCy vectors are typically of length 300)
+
 # Function to filter similar titles and contexts
 def filter_titles_and_contexts(dataset, threshold=0.95):
     titles = list(dataset.keys())
-    title_vectors = [nlp(title).vector for title in titles]
+    title_vectors = [nlp(title).vector for title in titles if is_valid_vector(nlp(title).vector)]
 
     similarity_matrix = cosine_similarity(title_vectors)
     to_remove = set()
     removed_pairs = []
 
     for i in range(len(titles)):
+        if not is_valid_vector(nlp(titles[i]).vector):
+            continue
         for j in range(i + 1, len(titles)):
+            if not is_valid_vector(nlp(titles[j]).vector):
+                continue
             if similarity_matrix[i, j] > threshold:
                 to_remove.add(titles[j])
                 removed_pairs.append((titles[i], titles[j]))
@@ -111,14 +124,14 @@ for title, context in simple_wiki_dataset.items():
 filtered_dataset, removed_pairs = filter_titles_and_contexts(filtered_dataset)
 
 # Print the filtered titles and contexts
-#print("Filtered Titles and Contexts:")
-#for title, context in filtered_dataset.items():
-#    print(f"Title: {title}\nContext: {context}\n")
+print("Filtered Titles and Contexts:")
+for title, context in filtered_dataset.items():
+    print(f"Title: {title}\nContext: {context}\n")
 
 # Print the omitted titles
-#print("\nOmitted Titles:")
-#for title1, title2 in removed_pairs:
-#    print(f"Removed '{title2}' because it's similar to '{title1}'")
+print("\nOmitted Titles:")
+for title1, title2 in removed_pairs:
+    print(f"Removed '{title2}' because it's similar to '{title1}'")
 
 # Save filtered dataset to CSV file
 output_file = 'filtered_dataset.csv'
